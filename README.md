@@ -354,3 +354,5 @@ LLM Providers: Azure OpenAI, Anthropic Claude, OpenAI (switchable per request)
 Embeddings: Local SentenceTransformer (BAAI/bge-small-en-v1.5 default, configurable)
 
 Infrastructure: Docker (both services), Nginx (frontend reverse proxy), Azure App Service compatible, Azurite for local blob storage emulation
+
+run using - uvicorn app:app --reload

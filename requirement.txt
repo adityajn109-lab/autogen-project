@@ -1,4 +1,4 @@
-pyautogen
+autogen
 fastapi
 uvicorn
 python-dotenv
