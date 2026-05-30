@@ -1,0 +1,7 @@
+uvicorn app:app --reload --port 8001
+how agent is defined 
+assistant agent . run 
+flask format 
+A tool is a function that an agent can call to perform actions it cannot do itself.
+tools passing to agent 
+dynamic tool 
