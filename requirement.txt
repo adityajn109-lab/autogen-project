@@ -1,4 +1,4 @@
-autogen
+autogen-ext
 fastapi
 uvicorn
 python-dotenv
@@ -6,3 +6,5 @@ openai
 autogen-core
 sqlalchemy
 psycopg2-binary
+sentence-transformers
+chromadb

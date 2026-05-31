@@ -7,7 +7,7 @@ import uuid
 class DocumentMemory:
 
     def __init__(self):
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
+        self.model = SentenceTransformer("./bge-small-en-v1.5")
 
         self.client = chromadb.Client(Settings(persist_directory="./chroma_db"))
         self.collection = self.client.get_or_create_collection(name="docs")
