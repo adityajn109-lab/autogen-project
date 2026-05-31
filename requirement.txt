@@ -1,0 +1,6 @@
+autogen
+fastapi
+uvicorn
+python-dotenv
+openai
+autogen-core
