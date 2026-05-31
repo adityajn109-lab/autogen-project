@@ -11,8 +11,11 @@ from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 from models import Tool, Conversation
 from db import SessionLocal
 from agent_registry import AgentRegistry
+from rag.document_memory import DocumentMemory,build_context
 
+memory = DocumentMemory()
 load_dotenv()
+
 
 
 app = FastAPI(title="jarvis")
@@ -141,13 +144,27 @@ async def chat(request: ChatRequest):
     db = SessionLocal()
 
     try:
-        # ✅ agent DB se aaega
-        agent = registry.get(request.agent) #here we are fetching the agent instance from the registry using the agent name provided in the request. This allows us to reuse the same agent instance for multiple requests, which is more efficient than creating a new instance for every request. 
+        # ✅ retrieve relevant chunks
+        chunks = memory.query(request.message)
 
-        result = await agent.run(task=request.message)
+        context = build_context(chunks)
+
+        # ✅ inject context
+        final_input = f"""
+        Use the following context to answer:
+
+        {context}
+
+        User question:
+        {request.message}
+        """
+
+        agent = registry.get(request.agent)
+
+        result = await agent.run(task=final_input)
         reply = result.messages[-1].content
 
-        # ✅ save chat
+        # ✅ save
         convo = Conversation(
             user_id=1,
             message=request.message,
@@ -157,7 +174,6 @@ async def chat(request: ChatRequest):
         db.commit()
 
         return {
-            "status": "success",
             "reply": reply
         }
 
@@ -231,3 +247,13 @@ async def add_agent(request: AgentRequest):
 
     finally:
         db.close()
+
+class DocRequest(BaseModel):
+    text: str
+
+
+@app.post("/add-doc")
+def add_doc(request: DocRequest):
+    memory.add_document(request.text)
+
+    return {"status": "document added"}

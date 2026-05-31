@@ -22,7 +22,10 @@ def load_tools_from_string(tool_code: str):
     }
 }
 
-    exec(tool_code, safe_globals, local_scope)
+    try:
+        exec(tool_code, safe_globals, local_scope)
+    except Exception as e:
+        raise ValueError(f"Invalid Python code: {str(e)}")
 
     tools = [
         obj for obj in local_scope.values()
