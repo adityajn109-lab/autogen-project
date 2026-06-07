@@ -23,6 +23,24 @@ def create_agent_from_db(agent_name: str, tools, model_client):
     finally:
         db.close()
 
+def get_agent_details(agent_name: str):
+    db = SessionLocal()
+
+    try:
+        agent_data = db.query(Agent).filter_by(name=agent_name).first()
+
+        if not agent_data:
+            raise ValueError(f"Agent '{agent_name}' not found")
+
+        return {
+            "name": agent_data.name,
+            "description": agent_data.description,
+            "system_message": agent_data.system_message
+        }
+
+    finally:
+        db.close()
+
 
 # ✅ Agent Registry (Main Manager)
 class AgentRegistry:

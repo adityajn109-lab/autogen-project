@@ -5,3 +5,4 @@ flask format
 A tool is a function that an agent can call to perform actions it cannot do itself.
 tools passing to agent 
 dynamic tool 
+"postgresql://postgres.ocfgvgjdjvtbcpwilaws:Adityajn109#@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgresia"

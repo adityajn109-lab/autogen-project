@@ -10,10 +10,10 @@ from autogen_agentchat.agents import AssistantAgent
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 from models import Tool, Conversation
 from db import SessionLocal
-from agent_registry import AgentRegistry
+from agent_registry import AgentRegistry,get_agent_details
 from rag.document_memory import DocumentMemory,build_context
 from rag.file_loader import load_pdf, load_txt, get_file_hash
-
+import tempfile
 
 memory = DocumentMemory()
 load_dotenv()
@@ -147,14 +147,24 @@ async def chat(request: ChatRequest):
 
     try:
         # ✅ retrieve relevant chunks
+        files = memory.list_files()
         chunks = memory.query(request.message)
-
         context = build_context(chunks)
+        if files:
+            file_list = "\n".join(f"  - {f['file_name']}" for f in files)
+            final_input = f"""
+        Use the following context to answer:
+        Do not truncate.
+        you are a helpfull assistant who tries to answer the question as best as possible using the provided context. and if no context .
+        you have these RAG files attached to you:
+        {file_list} 
+        {context}
 
-        # print(context)
-        
-        # ✅ inject context
-        final_input = f"""
+        User question:
+        {request.message}
+        """
+        else:
+            final_input = f"""
         Use the following context to answer:
         Do not truncate.
         you are a helpfull assistant who tries to answer the question as best as possible using the provided context. and if no context .
@@ -164,6 +174,10 @@ async def chat(request: ChatRequest):
         User question:
         {request.message}
         """
+        # print(context)
+
+        # ✅ inject context
+        
 
         agent = registry.get(request.agent)
 
@@ -257,6 +271,40 @@ async def add_agent(request: AgentRequest):
 class DocRequest(BaseModel):
     text: str
 
+@app.delete("/delete-agent/{agent_name}")
+def delete_agent(agent_name: str):
+    db = SessionLocal()
+
+    try:
+        agent=db.query(Agent).filter(Agent.name == agent_name).first()
+        if agent:
+            db.delete(agent)
+            db.commit()
+            return {"status": "deleted"}
+        else:
+            raise HTTPException(404, "Agent not found")
+    finally:        
+        db.close()
+
+@app.post("/update-agent/{agent_name}")
+def update_agent(agent_name: str, request: AgentRequest):
+    db = SessionLocal()
+
+    try:
+        agent=db.query(Agent).filter(Agent.name == agent_name).first()
+        if agent:
+            agent.description = request.description
+            agent.system_message = request.system_message
+            db.commit()
+            return {"status": "updated"}
+        else:
+            raise HTTPException(404, "Agent not found")
+    finally:        
+        db.close()
+
+
+
+
 
 @app.post("/add-doc")
 def add_doc(request: DocRequest):
@@ -266,20 +314,48 @@ def add_doc(request: DocRequest):
 
 @app.post("/upload-file")
 async def upload_file(file: UploadFile = File(...)):
-    name_of_file = file.filename
-    content = await file.read() 
+    SUPPORTED = {".pdf", ".txt", ".md"}
+    ext = os.path.splitext(file.filename)[1].lower()
+
+    # Validate file type upfront
+    if ext not in SUPPORTED:
+        raise HTTPException(400, f"Unsupported file type: {ext}. Use {SUPPORTED}")
+
+    content = await file.read()
+
+    # Limit file size (e.g. 10 MB)
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(413, "File too large. Max 10 MB.")
 
     file_hash = get_file_hash(content)
+    file_name = file.filename
 
-    # ✅ detect type
-    if file.filename.endswith(".pdf"):
-        with open("temp.pdf", "wb") as f:
-            f.write(content)
-        text = load_pdf("temp.pdf") + f" (File name is : {name_of_file})"
+    try:
+        if ext == ".pdf":
+            # FIX: use tempfile — safe for concurrent requests
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            try:
+                text = load_pdf(tmp_path)
+            finally:
+                os.unlink(tmp_path)  # always clean up
+        else:
+            text = content.decode("utf-8", errors="replace")
 
-    else:
-        text = content.decode("utf-8")+ f" (File name is : {name_of_file})"
+        # Append filename so LLM can reference it
+        text = text + f"\n\n[Document: this is a attached RAG file {file_name}]"
+        print(text)
+        memory.add_document(text, file_hash, file_name=file_name)
 
-    memory.add_document(text, file_hash)
+        return {
+            "status": "indexed",
+            "file_name": file_name,
+            "file_hash": file_hash[:8],   # partial hash is enough to show the user
+            "chunks": memory.count(),
+        }
 
-    return {"status": "file processed"}
+    except UnicodeDecodeError:
+        raise HTTPException(400, "Could not decode file. Is it a valid UTF-8 text file?")
+    except Exception as e:
+        raise HTTPException(500, f"Processing failed: {str(e)}")
