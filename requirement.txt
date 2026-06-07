@@ -8,3 +8,5 @@ sqlalchemy
 psycopg2-binary
 sentence-transformers
 chromadb
+pypdf
+python-multipart

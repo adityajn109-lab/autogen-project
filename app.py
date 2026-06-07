@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -12,6 +12,8 @@ from models import Tool, Conversation
 from db import SessionLocal
 from agent_registry import AgentRegistry
 from rag.document_memory import DocumentMemory,build_context
+from rag.file_loader import load_pdf, load_txt, get_file_hash
+
 
 memory = DocumentMemory()
 load_dotenv()
@@ -149,9 +151,13 @@ async def chat(request: ChatRequest):
 
         context = build_context(chunks)
 
+        # print(context)
+        
         # ✅ inject context
         final_input = f"""
         Use the following context to answer:
+        Do not truncate.
+        you are a helpfull assistant who tries to answer the question as best as possible using the provided context. and if no context .
 
         {context}
 
@@ -257,3 +263,23 @@ def add_doc(request: DocRequest):
     memory.add_document(request.text)
 
     return {"status": "document added"}
+
+@app.post("/upload-file")
+async def upload_file(file: UploadFile = File(...)):
+    name_of_file = file.filename
+    content = await file.read() 
+
+    file_hash = get_file_hash(content)
+
+    # ✅ detect type
+    if file.filename.endswith(".pdf"):
+        with open("temp.pdf", "wb") as f:
+            f.write(content)
+        text = load_pdf("temp.pdf") + f" (File name is : {name_of_file})"
+
+    else:
+        text = content.decode("utf-8")+ f" (File name is : {name_of_file})"
+
+    memory.add_document(text, file_hash)
+
+    return {"status": "file processed"}
